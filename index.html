@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Covenant Trust - Earn Naira</title>
+<style>
+body{font-family: Arial; background:#0f172a; color:white; text-align:center; padding:20px}
+.card{background:white; color:black; padding:20px; border-radius:15px; margin:20px 0}
+button{background:#22c55e; color:white; border:none; padding:15px 30px; border-radius:10px; font-size:18px; width:100%; font-weight:bold}
+.balance{font-size:32px; color:#22c55e; font-weight:bold}
+.verse{font-style:italic; font-size:18px}
+</style>
+</head>
+<body>
+<h1>📖 Covenant Trust</h1>
+<p>Read Daily, Earn Blessing</p>
+
+<div class="card">
+<p>Your Balance</p>
+<div class="balance">₦<span id="balance">0</span></div>
+<p style="font-size:12px">Min Withdraw: ₦1000 via Monnify</p>
+</div>
+
+<div class="card">
+<h3>Today's Verse</h3>
+<p class="verse" id="verse">"For I know the plans I have for you, declares the Lord. - Jeremiah 29:11"</p>
+<button onclick="earn()">Read & Earn ₦5</button>
+<p id="msg" style="color:green; margin-top:10px"></p>
+</div>
+
+<div class="card">
+<button onclick="withdraw()" style="background:#0f172a">Withdraw to Bank (Min ₦1000)</button>
+</div>
+
+<script>
+let bal = localStorage.getItem('cov_balance') ? parseInt(localStorage.getItem('cov_balance')) : 0;
+document.getElementById('balance').innerText = bal;
+
+function earn(){
+  bal += 5;
+  localStorage.setItem('cov_balance', bal);
+  document.getElementById('balance').innerText = bal;
+  document.getElementById('msg').innerText = "✅ You earned ₦5! Come back tomorrow.";
+}
+
+function withdraw(){
+  if(bal < 1000){
+    alert("You need ₦1000 to withdraw. Your balance: ₦" + bal);
+  } else {
+    alert("Withdrawal request: ₦" + bal + " - We will pay via Monnify soon!");
+  }
+}
+</script>
+</body>
+</html>
