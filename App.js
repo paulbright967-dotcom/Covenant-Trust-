@@ -1,0 +1,445 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, SafeAreaView } from 'react-native';
+
+// ========== ADMIN BANK ACCOUNTS & FINANCIAL VAULTS ==========
+// Pull from process.env or backend config in production
+const ADMIN_FINANCIAL_CONFIG = {
+  mainFundAccount: {
+    bankName: process.env.EXPO_PUBLIC_GTB_BANK_NAME || "Guaranty Trust Bank (GTB)",
+    accountNumber: process.env.EXPO_PUBLIC_GTB_ACCOUNT_NO || "FETCHING_FROM_SERVER...",
+    accountName: process.env.EXPO_PUBLIC_GTB_ACCOUNT_NAME || "Covenant Trust Merchant Vault"
+  },
+  commissionAccount: {
+    bankName: process.env.EXPO_PUBLIC_ZENITH_BANK_NAME || "Zenith Bank",
+    accountNumber: process.env.EXPO_PUBLIC_ZENITH_ACCOUNT_NO || "FETCHING_FROM_SERVER...",
+    accountName: process.env.EXPO_PUBLIC_ZENITH_ACCOUNT_NAME || "Covenant Trust Profit Vault"
+  },
+  mainBalanceWallet: 0,       
+  commissionBalanceWallet: 0  
+};
+
+const processAdminSplit = (amount, type) => {
+  if (type === 'deposit') {
+    ADMIN_FINANCIAL_CONFIG.mainBalanceWallet += amount;
+  } else if (type === 'withdrawal') {
+    const commissionCut = amount * 0.10;
+    ADMIN_FINANCIAL_CONFIG.commissionBalanceWallet += commissionCut;
+  }
+};
+
+// ========== 6 VIP LEVELS & SPECIFIC WITHDRAWAL DAYS ==========
+const VIP_LEVELS = {
+  0: { level: 0, name: 'Free Tier', amount: 0, day: 'Saturday', dailyTask: 2, withdrawLimit: 2000, price: 0, color: 'gray' },
+  1: { level: 1, name: 'VIP 1', amount: 10500, day: 'Monday', dailyTask: 3, withdrawLimit: 10000, price: 10500, color: '#CD7F32' },
+  2: { level: 2, name: 'VIP 2', amount: 25500, day: 'Tuesday', dailyTask: 5, withdrawLimit: 25000, price: 25500, color: '#C0C0C0' },
+  3: { level: 3, name: 'VIP 3', amount: 55000, day: 'Wednesday', dailyTask: 10, withdrawLimit: 60000, price: 55000, color: '#FFD700' },
+  4: { level: 4, name: 'VIP 4', amount: 155000, day: 'Thursday', dailyTask: 20, withdrawLimit: 160000, price: 155000, color: '#0066FF' },
+  5: { level: 5, name: 'VIP 5', amount: 455000, day: 'Friday', dailyTask: 50, withdrawLimit: 460000, price: 455000, color: '#9933FF' }
+};
+
+// ========== BIBLE VERSES DATABASE ==========
+const BIBLE_VERSES = [
+  { id: 1, text: "For God so loved the world, that he gave his only Son, that whoever believes in him should not perish but have eternal life. - John 3:16", reward: 100 },
+  { id: 2, text: "I can do all things through Christ who strengthens me. - Philippians 4:13", reward: 100 },
+  { id: 3, text: "Trust in the Lord with all your heart, and do not lean on your own understanding. - Proverbs 3:5", reward: 100 },
+  { id: 4, text: "The Lord is my shepherd; I shall not want. - Psalm 23:1", reward: 100 },
+  { id: 5, text: "And we know that for those who love God all things work together for good. - Romans 8:28", reward: 100 },
+  ...Array.from({ length: 195 }, (_, index) => ({
+    id: index + 6,
+    text: `Your word is a lamp to my feet and a light to my path. - Psalm 119:${105 + index}`,
+    reward: 100
+  }))
+];
+
+// ========== FAKE DATABASE ==========
+let FAKE_DB = {
+  users: [
+    { id: 1, name: "Admin Master", email: "admin@covenant.com", password: "1234", balance: 100000, totalEarned: 250000, vip: 5, vipExpiry: new Date(Date.now() + 182 * 24 * 60 * 60 * 1000).toISOString(), isAdmin: true, ref: "COVENANT001", referredBy: null, tasksDoneToday: 0, lastReset: new Date().toDateString() },
+    { id: 2, name: "John Doe", email: "john@test.com", password: "1234", balance: 5000, totalEarned: 15000, vip: 1, vipExpiry: new Date(Date.now() + 182 * 24 * 60 * 60 * 1000).toISOString(), isAdmin: false, ref: "COVENANT002", referredBy: "COVENANT001", tasksDoneToday: 0, lastReset: new Date().toDateString() },
+  ],
+  transactions: [
+    { id: 1, userId: 2, type: 'Deposit', amount: 10500, status: 'Successful', date: '2026-06-01' },
+    { id: 2, userId: 2, type: 'Withdrawal', amount: 3000, status: 'Pending', bankName: 'GTB', accountNumber: '0123456789', date: '2026-06-02' }
+  ],
+  withdrawRequests: [
+    { id: 1, userId: 2, userName: 'John Doe', amount: 2700, grossAmount: 3000, fee: 300, bankName: 'GTB', accountNumber: '0123456789', status: 'Pending' }
+  ],
+  announcementTicker: [
+    "🎉 8324466777 just deposited ₦10,500 successfully!",
+    "💸 70431134566 just withdrew ₦25,000 to Zenith Bank!",
+    "👑 User 8129938481 upgraded to VIP 3 successfully!",
+    "🚀 9034221199 earned 5% referral bonus!",
+    "🎉 9081122334 just deposited ₦55,000 successfully!",
+    "💸 8031122445 just withdrew ₦10,000 to GTB!"
+  ],
+  globalAnnouncement: "🙏 Welcome to Covenant Trust! Read daily verses, invite friends to earn 5% interest, and manage your financial wealth securely."
+};
+
+const updateUser = (updatedUser) => {
+  const index = FAKE_DB.users.findIndex(u => u.id === updatedUser.id);
+  if(index !== -1) FAKE_DB.users[index] = updatedUser;
+};
+
+// ========== MAIN APP CONTAINER ==========
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [page, setPage] = useState('login');
+
+  useEffect(() => {
+    if(user && user.lastReset !== new Date().toDateString()){
+      const updated = {...user, tasksDoneToday: 0, lastReset: new Date().toDateString()};
+      setUser(updated);
+      updateUser(updated);
+    }
+  }, [user]);
+
+  if (!user) {
+    return page === 'login'
+      ? <LoginScreen setUser={setUser} setPage={setPage} />
+      : <RegisterScreen setUser={setUser} setPage={setPage} />;
+  }
+
+  return (
+    <SafeAreaView style={{flex: 1, backgroundColor: '#F5F5F5'}}>
+      {page === 'home' && <HomeScreen setPage={setPage} user={user} setUser={setUser} />}
+      {page === 'tasks' && <TasksScreen setPage={setPage} user={user} setUser={setUser} />}
+      {page === 'wallet' && <WalletScreen setPage={setPage} user={user} setUser={setUser} />}
+      {page === 'transactions' && <TransactionsScreen setPage={setPage} user={user} />}
+      {page === 'profile' && <ProfileScreen setPage={setPage} user={user} setUser={setUser} />}
+      {page === 'vip' && <VipScreen setPage={setPage} user={user} setUser={setUser} />}
+      {page === 'withdraw' && <WithdrawScreen setPage={setPage} user={user} setUser={setUser} />}
+      {page === 'deposit' && <DepositScreen setPage={setPage} user={user} setUser={setUser} />}
+      {page === 'admin' && <AdminScreen setPage={setPage} />}
+
+      <View style={styles.bottomNav}>
+        <NavButton icon="🏠" label="Home" active={page==='home'} onPress={() => setPage('home')} />
+        <NavButton icon="📖" label="Tasks" active={page==='tasks'} onPress={() => setPage('tasks')} />
+        <NavButton icon="💳" label="Wallet" active={page==='wallet'} onPress={() => setPage('wallet')} />
+        <NavButton icon="📜" label="History" active={page==='transactions'} onPress={() => setPage('transactions')} />
+        <NavButton icon="👤" label="Profile" active={page==='profile'} onPress={() => setPage('profile')} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const NavButton = ({icon, label, active, onPress}) => (
+  <TouchableOpacity style={styles.navBtn} onPress={onPress}>
+    <Text style={{fontSize: 20}}>{icon}</Text>
+    <Text style={{color: active? '#0066FF' : 'gray', fontSize: 10, fontWeight: active? 'bold' : 'normal'}}>{label}</Text>
+  </TouchableOpacity>
+);
+
+// ========== LOGIN SCREEN ==========
+function LoginScreen({ setUser, setPage }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleLogin = () => {
+    const found = FAKE_DB.users.find(u => u.email === email && u.password === password);
+    if (found) {
+      setUser(found);
+      setPage(found.isAdmin ? 'admin' : 'home');
+    } else {
+      Alert.alert('Error', 'Invalid email or password');
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.authContainer}>
+      <Text style={styles.logoText}>✝️ Covenant Trust</Text>
+      <Text style={styles.subLogoText}>Read Bible Verses & Earn Daily Rewards</Text>
+      
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Welcome Back</Text>
+        <TextInput 
+          style={styles.input} 
+          placeholder="Email Address" 
+          placeholderTextColor="#888"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+        />
+        <TextInput 
+          style={styles.input} 
+          placeholder="Password" 
+          placeholderTextColor="#888"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleLogin}>
+          <Text style={styles.primaryBtnText}>Log In</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity onPress={() => setPage('register')} style={{marginTop: 15, alignItems: 'center'}}>
+          <Text style={{color: '#0066FF'}}>Don't have an account? Register</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ========== REGISTER SCREEN ==========
+function RegisterScreen({ setUser, setPage }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
+
+  const handleRegister = () => {
+    if (!name || !email || !password) {
+      Alert.alert('Error', 'Please fill in all mandatory fields');
+      return;
+    }
+    const exists = FAKE_DB.users.some(u => u.email === email);
+    if (exists) {
+      Alert.alert('Error', 'Email already registered');
+      return;
+    }
+
+    const newUserId = FAKE_DB.users.length + 1;
+    const newUser = {
+      id: newUserId,
+      name,
+      email,
+      password,
+      balance: 0,
+      totalEarned: 0,
+      vip: 0,
+      vipExpiry: new Date(Date.now() + 182 * 24 * 60 * 60 * 1000).toISOString(),
+      isAdmin: false,
+      ref: `COVENANT00${newUserId}`,
+      referredBy: referralCode ? referralCode.toUpperCase() : null,
+      tasksDoneToday: 0,
+      lastReset: new Date().toDateString()
+    };
+
+    FAKE_DB.users.push(newUser);
+    setUser(newUser);
+    setPage('home');
+    Alert.alert('Success', 'Account created successfully!');
+  };
+
+  return (
+    <SafeAreaView style={styles.authContainer}>
+      <Text style={styles.logoText}>✝️ Covenant Trust</Text>
+      <Text style={styles.subLogoText}>Create a new account</Text>
+      
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Register</Text>
+        <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor="#888" value={name} onChangeText={setName} />
+        <TextInput style={styles.input} placeholder="Email Address" placeholderTextColor="#888" value={email} onChangeText={setEmail} autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#888" secureTextEntry value={password} onChangeText={setPassword} />
+        <TextInput style={styles.input} placeholder="Referral Code (Optional - Get 5% bonus)" placeholderTextColor="#888" value={referralCode} onChangeText={setReferralCode} autoCapitalize="characters" />
+        
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleRegister}>
+          <Text style={styles.primaryBtnText}>Register</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity onPress={() => setPage('login')} style={{marginTop: 15, alignItems: 'center'}}>
+          <Text style={{color: '#0066FF'}}>Already have an account? Login</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ========== HOME SCREEN ==========
+function HomeScreen({ setPage, user }) {
+  const [tickerIndex, setTickerIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTickerIndex((prev) => (prev + 1) % FAKE_DB.announcementTicker.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>Hello, {user.name}</Text>
+          <Text style={styles.vipBadge}>{VIP_LEVELS[user.vip].name} ({VIP_LEVELS[user.vip].day} Withdrawals)</Text>
+        </View>
+        {user.isAdmin && (
+          <TouchableOpacity style={styles.adminNavBtn} onPress={() => setPage('admin')}>
+            <Text style={{color: '#FFF', fontWeight: 'bold', fontSize: 12}}>Admin Panel</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.tickerCard}>
+        <Text style={styles.tickerTitle}>🔥 Live Activity Feed</Text>
+        <Text style={styles.tickerText}>{FAKE_DB.announcementTicker[tickerIndex]}</Text>
+      </View>
+
+      <View style={styles.announcementCard}>
+        <Text style={styles.announcementTitle}>📢 Covenant Covenant</Text>
+        <Text style={styles.announcementText}>{FAKE_DB.globalAnnouncement}</Text>
+      </View>
+
+      <View style={styles.balanceCard}>
+        <Text style={styles.balanceLabel}>Total Wallet Balance</Text>
+        <Text style={styles.balanceAmount}>₦{user.balance.toLocaleString()}</Text>
+        <Text style={styles.earnedText}>Total Earned: ₦{user.totalEarned.toLocaleString()}</Text>
+        
+        <View style={styles.balanceActions}>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => setPage('deposit')}>
+            <Text style={styles.actionBtnText}>Deposit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#28A745'}]} onPress={() => setPage('wallet')}>
+            <Text style={styles.actionBtnText}>Wallet & Withdraw</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>🎁 Referral Program (5% Commission)</Text>
+        <Text style={{color: '#444', fontSize: 13, marginBottom: 5}}>Invite friends with your referral code and earn 5% interest on all their deposits instantly!</Text>
+        <View style={{backgroundColor: '#EBF3FF', padding: 10, borderRadius: 8, alignItems: 'center', marginTop: 5}}>
+          <Text style={{fontWeight: 'bold', color: '#0066FF', fontSize: 16}}>Your Code: {user.ref}</Text>
+        </View>
+      </View>
+
+      <View style={styles.quickLinks}>
+        <TouchableOpacity style={styles.quickCard} onPress={() => setPage('tasks')}>
+          <Text style={{fontSize: 26}}>📖</Text>
+          <Text style={styles.quickText}>Bible Tasks</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.quickCard} onPress={() => setPage('vip')}>
+          <Text style={{fontSize: 26}}>👑</Text>
+          <Text style={styles.quickText}>VIP Tiers</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+}
+
+// ========== BIBLE TASKS SCREEN ==========
+function TasksScreen({ user, setUser }) {
+  const [selectedVerse, setSelectedVerse] = useState(null);
+  const [timer, setTimer] = useState(20);
+  const [isActive, setIsActive] = useState(false);
+
+  const limit = VIP_LEVELS[user.vip].dailyTask;
+
+  useEffect(() => {
+    let interval = null;
+    if (isActive && timer > 0) {
+      interval = setInterval(() => {
+        setTimer(t => t - 1);
+      }, 1000);
+    } else if (timer === 0 && isActive) {
+      setIsActive(false);
+      completeTaskReward();
+    }
+    return () => clearInterval(interval);
+  }, [isActive, timer]);
+
+  const startTask = (verse) => {
+    if (user.tasksDoneToday >= limit) {
+      Alert.alert('Limit Reached', `You have finished your daily limit of ${limit} tasks for ${VIP_LEVELS[user.vip].name}. Upgrade VIP for more!`);
+      return;
+    }
+    setSelectedVerse(verse);
+    setTimer(20);
+    setIsActive(true);
+  };
+
+  const completeTaskReward = () => {
+    const updated = {
+      ...user,
+      balance: user.balance + 100,
+      totalEarned: user.totalEarned + 100,
+      tasksDoneToday: user.tasksDoneToday + 1
+    };
+    setUser(updated);
+    updateUser(updated);
+    Alert.alert('Blessed!', 'Task completed successfully! ₦100 added to your balance.');
+    setSelectedVerse(null);
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.screenTitle}>Bible Reading Tasks</Text>
+      <Text style={styles.limitText}>Completed Today: {user.tasksDoneToday} / {limit} (Tier: {VIP_LEVELS[user.vip].name})</Text>
+
+      {selectedVerse ? (
+        <View style={styles.taskActiveCard}>
+          <Text style={styles.verseHeader}>📖 Read & Meditate (20 Seconds)</Text>
+          <Text style={styles.verseText}>{selectedVerse.text}</Text>
+          
+          <View style={styles.timerCircle}>
+            <Text style={styles.timerNumber}>{timer}s</Text>
+          </View>
+          <Text style={{textAlign: 'center', color: '#666', marginTop: 10}}>Please stay on page until countdown completes...</Text>
+        </View>
+      ) : (
+        <View>
+          <Text style={{fontSize: 13, color: '#666', marginBottom: 10}}>Select any verse below to begin your 20-second meditation task:</Text>
+          {BIBLE_VERSES.slice(0, 15).map(verse => (
+            <TouchableOpacity key={verse.id} style={styles.verseCard} onPress={() => startTask(verse)}>
+              <Text style={styles.verseItemTitle}>Bible Task #{verse.id}</Text>
+              <Text style={styles.verseItemSnippet} numberOfLines={1}>{verse.text}</Text>
+              <Text style={styles.verseReward}>Reward: ₦100 (20s)</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+// ========== WALLET SCREEN ==========
+function WalletScreen({ setPage, user }) {
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.screenTitle}>My Wallet</Text>
+
+      <View style={styles.balanceCard}>
+        <Text style={styles.balanceLabel}>Available Balance</Text>
+        <Text style={styles.balanceAmount}>₦{user.balance.toLocaleString()}</Text>
+        <Text style={styles.earnedText}>VIP Tier: {VIP_LEVELS[user.vip].name}</Text>
+        <Text style={{color: '#FFF', fontSize: 12, marginBottom: 15}}>Withdrawal Day Rule: <Text style={{fontWeight: 'bold'}}>{VIP_LEVELS[user.vip].day}s Only</Text></Text>
+
+        <View style={styles.balanceActions}>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => setPage('deposit')}>
+            <Text style={styles.actionBtnText}>Deposit Funds</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#28A745'}]} onPress={() => setPage('withdraw')}>
+            <Text style={styles.actionBtnText}>Request Withdrawal</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>VIP Withdrawal Schedule Rules</Text>
+        <Text style={styles.ruleText}>• VIP 1: Mondays Only</Text>
+        <Text style={styles.ruleText}>• VIP 2: Tuesdays Only</Text>
+        <Text style={styles.ruleText}>• VIP 3: Wednesdays Only</Text>
+        <Text style={styles.ruleText}>• VIP 4: Thursdays Only</Text>
+        <Text style={styles.ruleText}>• VIP 5: Fridays Only</Text>
+        <Text style={styles.ruleText}>• Free Tier: Saturdays Only</Text>
+        <Text style={styles.ruleNote}>Note: An automatic 10% administration processing cut is deducted immediately upon requesting withdrawals.</Text>
+      </View>
+    </ScrollView>
+  );
+}
+
+// ========== TRANSACTIONS HISTORY SCREEN ==========
+function TransactionsScreen({ user }) {
+  const userTransactions = FAKE_DB.transactions.filter(t => t.userId === user.id);
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.screenTitle}>Transaction History</Text>
+      
+      {userTransactions.length === 0 ? (
+        <Text style={{color: '#666', textAlign: 'center', marginTop: 40}}>No transactions found yet.</Text>
+      ) : (
+        userTransactions.map(tx => (
+          <View key={tx.id} style={styles.txCard}>
+            <View>
+              <Text style={styles.txType}>{tx.type}</Text>
+              <Text style={styles.txDate}>{tx.date}</Text>
