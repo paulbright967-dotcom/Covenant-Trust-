@@ -1,0 +1,8 @@
+{
+  "expo": {
+    "name": "Covenant Trust",
+    "slug": "covenant-trust",
+    "version": "1.0.0",
+    "platforms": ["ios", "android", "web"]
+  }
+}
