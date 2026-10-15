@@ -3,6 +3,23 @@
     "name": "Covenant Trust",
     "slug": "covenant-trust",
     "version": "1.0.0",
-    "platforms": ["ios", "android", "web"]
+    "platforms": ["ios", "android", "web"],
+    "icon": "./IMG-20261015-WA0693.jpg",
+    "splash": {
+      "image": "./IMG-20261015-WA0693.jpg",
+      "backgroundColor": "#FFC300",
+      "resizeMode": "contain"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./IMG-20261015-WA0693.jpg",
+        "backgroundColor": "#FFC300"
+      }
+    },
+    "web": {
+      "favicon": "./IMG-20261015-WA0693.jpg",
+      "backgroundColor": "#FFC300",
+      "name": "Covenant Trust"
+    }
   }
 }
